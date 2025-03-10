@@ -3,25 +3,22 @@
 
 #include "RealisticCaloDigi.h"
 
-using namespace lcio ;
-using namespace marlin ;
-
 /** === RealisticCaloDigiSilicon Processor === <br>
     realistic digitisation of silicon calorimeter hits
     D.Jeans 02/2016.
 */
 
-class RealisticCaloDigiSilicon : public RealisticCaloDigi {
+struct RealisticCaloDigiSilicon : public RealisticCaloDigi {
   
  public:
-  virtual Processor*  newProcessor() { return new RealisticCaloDigiSilicon ; }
-  RealisticCaloDigiSilicon() ;
+  RealisticCaloDigiSilicon(const std::string& name, ISvcLocator* svcLoc) ;
 
  protected:
   int getMyUnit() const {return MIP;}
   float convertEnergy( float energy, int inputUnit )const; // convert energy from input to output (MIP) scale 
   float digitiseDetectorEnergy(float energy)const;         // apply silicon-specific realistic digitisation
-  float _ehEnergy{};                                    // energy to create e-h pair in silicon
+  
+  Gaudi::Property<float> m_ehEnergy{this, "silicon_pairEnergy" , 3.6f, "energy required to create e-h pair in silicon (in eV)"};
 } ;
 
 #endif

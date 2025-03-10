@@ -8,19 +8,16 @@
     D.Jeans 02/2016.
 */
 
-class RealisticCaloRecoScinPpd : public RealisticCaloReco {
-
+struct RealisticCaloRecoScinPpd final : RealisticCaloReco {
  public:
-
-  virtual Processor*  newProcessor() { return new RealisticCaloRecoScinPpd ; }
-
-  RealisticCaloRecoScinPpd();
+  RealisticCaloRecoScinPpd(const std::string& name, ISvcLocator* svcLoc);
 
  protected:
-  virtual float reconstructEnergy(const CalorimeterHit* hit);
+  float reconstructEnergy(const edm4hep::CalorimeterHit* hit, int layer) const override;
 
-  float _PPD_pe_per_mip{};         // # photoelectrons/MIP for MPPC
-  int   _PPD_n_pixels{};           // # pixels in MPPC
+  Gaudi::Property<float> m_PPD_pe_per_mip{this, "ppd_mipPe", 10.0f, "# Photo-electrons per MIP (scintillator): used to Poisson smear #PEs if >0"};
+  Gaudi::Property<int> m_PPD_n_pixels{this, "ppd_npix", 10000, "Total number of MPPC/SiPM pixels for implementation of saturation effect"};
+ 
 } ;
 
 #endif 

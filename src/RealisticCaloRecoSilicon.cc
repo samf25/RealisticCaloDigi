@@ -4,25 +4,13 @@
 #include <iostream>
 
 
-using std::cout;
-using std::endl;
+DECLARE_COMPONENT(RealisticCaloRecoSilicon)
 
-RealisticCaloRecoSilicon aRealisticCaloRecoSilicon;
+RealisticCaloRecoSilicon::RealisticCaloRecoSilicon(const std::string& name, ISvcLocator* svcLoc) : RealisticCaloReco(name, svcLoc) {}
 
-RealisticCaloRecoSilicon::RealisticCaloRecoSilicon() : RealisticCaloReco::Processor("RealisticCaloRecoSilicon") {
-  _description = "Performs fist reconstruction of silicon ECAL hits";
-}
-
-void RealisticCaloRecoSilicon::init() {
-  RealisticCaloReco::init();
-}
-
-
-float RealisticCaloRecoSilicon::reconstructEnergy(const CalorimeterHit* hit) {
+float RealisticCaloRecoSilicon::reconstructEnergy(const edm4hep::CalorimeterHit* hit, int layer) const{
   // here the input energy should be in MIPs
   float energy = hit->getEnergy();
-  // what layer is this hit in?
-  int layer   = (*_idDecoder) (hit)[_cellIDLayerString];
   // now correct for sampling fraction
   energy *= getLayerCalib( layer );
   return energy;

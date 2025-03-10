@@ -11,17 +11,13 @@
 
 */
 
-class RealisticCaloRecoSilicon : public RealisticCaloReco {
+struct RealisticCaloRecoSilicon final : RealisticCaloReco {
 
  public:
-  virtual Processor*  newProcessor() { return new RealisticCaloRecoSilicon ; }
-  RealisticCaloRecoSilicon();
+  RealisticCaloRecoSilicon(const std::string& name, ISvcLocator* svcLoc);
 
  protected:
-
-  virtual void init();
-  virtual float reconstructEnergy(const CalorimeterHit* hit);
-
+  float reconstructEnergy(const edm4hep::CalorimeterHit* hit, int layer) const override;
 } ;
 
 #endif 
