@@ -17,9 +17,6 @@
 #include <cmath>
 #include <set>
 
-#include "CLHEP/Random/Random.h"
-#include "CLHEP/Random/RandGauss.h"
-#include "CLHEP/Random/RandFlat.h"
 #include "CLHEP/Units/PhysicalConstants.h"
 
 
@@ -38,6 +35,7 @@ RealisticCaloDigi::RealisticCaloDigi(const std::string& name, ISvcLocator* svcLo
      KeyValues("outputRelationCollections", {"CaloHitLinks"}) })
   {
     m_geoSvc = serviceLocator()->service("GeoSvc");  // important to initialize m_geoSvc
+    m_rndSvc = serviceLocator()->service("RndmGenSvc");  // important to initialize m_rndSvc
   }
 
 StatusCode RealisticCaloDigi::initialize() {
@@ -78,6 +76,10 @@ StatusCode RealisticCaloDigi::initialize() {
     }
   }
 
+  // Initialize Random Distributions
+  m_rndSvc->generator(Rndm::Gauss(0.0, 1.0), m_gauss).ignore();
+  m_rndSvc->generator(Rndm::Flat(0.0, 1.0), m_flat).ignore();
+
   return StatusCode::SUCCESS;
 }
 
@@ -87,11 +89,12 @@ std::tuple<edm4hep::CalorimeterHitCollection, edm4hep::CaloHitSimCaloHitLinkColl
       const edm4hep::SimCalorimeterHitCollection& inputSim,
       const edm4hep::EventHeaderCollection& headers) const {
   MsgStream log(msgSvc(), name());
-  auto seeder = service<IUniqueIDGenSvc>("UniqueIDGenSvc", true);
-  CLHEP::HepRandom::setTheSeed( seeder->getUniqueID(headers[0].getEventNumber(), headers[0].getRunNumber(), this->name()) );
+  //auto seeder = service<IUniqueIDGenSvc>("UniqueIDGenSvc", true);
+  //CLHEP::HepRandom::setTheSeed( seeder->getUniqueID(headers[0].getEventNumber(), headers[0].getRunNumber(), this->name()) );
 
   // decide on this event's correlated miscalibration
-  float event_correl_miscalib = ( m_misCalib_correl>0 ) ? CLHEP::RandGauss::shoot( 1.0, m_misCalib_correl ) : 0;
+  m_gauss->initialize(Rndm::Gauss(1.0, m_misCalib_correl)).ignore();
+  float event_correl_miscalib = ( m_misCalib_correl>0 ) ? m_gauss->shoot() : 0;
 
   edm4hep::CalorimeterHitCollection newcol;
   edm4hep::CaloHitSimCaloHitLinkCollection relcol;
@@ -171,7 +174,8 @@ float RealisticCaloDigi::EnergyDigi(float energy, float event_correl_miscalib) c
   // random miscalib, uncorrelated in cells
   if (m_misCalib_uncorrel>0) {
     float miscal(0);
-    miscal = CLHEP::RandGauss::shoot( 1.0, m_misCalib_uncorrel );
+    m_gauss->initialize(Rndm::Gauss(1.0, m_misCalib_uncorrel)).ignore();
+    miscal = m_gauss->shoot();
     e_out*=miscal;
   }
 
@@ -182,11 +186,15 @@ float RealisticCaloDigi::EnergyDigi(float energy, float event_correl_miscalib) c
   // limited electronics dynamic range
   if ( m_elec_rangeMip > 0 ) e_out = std::min ( e_out, m_elec_rangeMip*oneMipInMyUnits );
   // add electronics noise
-  if ( m_elec_noiseMip > 0 ) e_out += CLHEP::RandGauss::shoot(0, m_elec_noiseMip*oneMipInMyUnits );
+  if ( m_elec_noiseMip > 0 ) {
+    m_gauss->initialize(Rndm::Gauss(0, m_elec_noiseMip*oneMipInMyUnits)).ignore();
+    e_out += m_gauss->shoot();
+  }
 
   // random cell kill
   if (m_deadCell_fraction>0){
-    if (CLHEP::RandFlat::shoot(0.0,1.0)<m_deadCell_fraction ) e_out=0;
+    m_flat->initialize(Rndm::Flat(0.0,1.0)).ignore();
+    if (m_flat->shoot()<m_deadCell_fraction ) e_out=0;
   }
   return e_out;
 }
@@ -291,6 +299,7 @@ RealisticCaloDigi::integr_res_opt RealisticCaloDigi::ROCIntegration( const edm4h
 //------------------------------------------------------------------------------
 
 float RealisticCaloDigi::SmearTime(float time) const{
-  return m_time_resol>0.f ? time + CLHEP::RandGauss::shoot(0, m_time_resol ) : time;
+  m_gauss->initialize(Rndm::Gauss(0, m_time_resol)).ignore();
+  return m_time_resol>0.f ? time + m_gauss->shoot() : time;
 }
 
