@@ -35,7 +35,7 @@ float RealisticCaloDigiSilicon::digitiseDetectorEnergy(float energy) const {
     // calculate #e-h pairs
     float nehpairs = 1e9*energy/m_ehEnergy; // check units of energy! _ehEnergy is in eV, energy in GeV
     // fluctuate it by Poisson (actually an overestimate: Fano factor actually makes it smaller, however even this overstimated effect is tiny for our purposes)
-    smeared_energy *= CLHEP::RandPoisson::shoot( nehpairs )/nehpairs;
+    smeared_energy *= m_engine.Poisson( nehpairs )/nehpairs;
   }
 
   return smeared_energy/m_calib_mip; // convert to MIP units

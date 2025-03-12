@@ -2,9 +2,9 @@
 
 #include <DDSegmentation/BitFieldCoder.h>
 
+#include <edm4hep/SimCalorimeterHit.h>
 #include <edm4hep/MutableCalorimeterHit.h>
 #include <edm4hep/MutableCaloHitSimCaloHitLink.h>
-#include <edm4hep/SimCalorimeterHit.h>
 
 #include <iostream>
 #include <string>
@@ -17,12 +17,15 @@ using namespace std;
 RealisticCaloReco::RealisticCaloReco(const std::string& name, ISvcLocator* svcLoc) : MultiTransformer(name, svcLoc, 
   { KeyValues("inputLinkCollections", {"CaloHitLinks"}) },
   { KeyValues("outputHitCollections", {"CalorimeterHitsRec"}),
-   KeyValues("outputRelationCollections", {"CaloHitLinksRec"}) })
-  {
-    m_geoSvc = serviceLocator()->service("GeoSvc");  // important to initialize m_geoSvc
-  }
+   KeyValues("outputRelationCollections", {"CaloHitLinksRec"}) }) {}
 
 StatusCode RealisticCaloReco::initialize() {
+  m_geoSvc = serviceLocator()->service("GeoSvc");
+  if (!m_geoSvc) {
+    error() << "Unable to retrieve the GeoSvc" << endmsg;
+    return StatusCode::FAILURE;
+  }
+
   assert ( m_calibrCoeff.size()>0 );
   assert ( m_calibrCoeff.size() == m_calLayers.size() );
 
@@ -35,15 +38,13 @@ std::tuple<edm4hep::CalorimeterHitCollection,
            edm4hep::CaloHitSimCaloHitLinkCollection> RealisticCaloReco::operator()(
            const edm4hep::CaloHitSimCaloHitLinkCollection& inputLinks) const {
   // * Reading Collections of digitised calorimeter Hits *
-  MsgStream log(msgSvc(), name());
-
   std::string initString;
   initString = m_geoSvc->constantAsString(m_encodingStringVariable.value());
   dd4hep::DDSegmentation::BitFieldCoder bitFieldCoder(initString);  // check!
   
   edm4hep::CalorimeterHitCollection newcol;
   edm4hep::CaloHitSimCaloHitLinkCollection relcol;
-  log << MSG::DEBUG  << " number of elements = " << inputLinks.size() << endmsg;
+  debug()  << " number of elements = " << inputLinks.size() << endmsg;
 
   for (int j(0); j < inputLinks.size(); ++j) {
       edm4hep::CaloHitSimCaloHitLink link = inputLinks.at( j ) ;

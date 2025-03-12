@@ -9,7 +9,9 @@
 #include <edm4hep/CaloHitSimCaloHitLinkCollection.h>
 
 #include "k4Interface/IGeoSvc.h"
-#include "GaudiKernel/RndmGenerators.h"
+#include "k4Interface/IUniqueIDGenSvc.h"
+
+#include "TRandom2.h"
 
 #include <string>
 #include <tuple>
@@ -101,11 +103,10 @@ struct RealisticCaloDigi : k4FWCore::MultiTransformer<
    
 
    int m_threshold_iunit{};  
-   SmartIF<IGeoSvc>         m_geoSvc;
-   SmartIF<IRndmGenSvc>     m_rndSvc;
-   IRndmGen*                m_gauss;
-   IRndmGen*                m_flat;
-
+   inline static thread_local TRandom2 m_engine;
+   SmartIF<IGeoSvc>                    m_geoSvc;
+   SmartIF<IUniqueIDGenSvc>            m_uidSvc;
+ 
 
    integr_function m_integr_function{};
 

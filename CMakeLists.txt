@@ -10,6 +10,7 @@ gaudi_add_module(RealisticCaloDigiK4FWCPlugins
 		LINK k4FWCore::k4FWCore
 			Gaudi::GaudiKernel
 			EDM4HEP::edm4hep
+			${ROOT_LIBRARIES}
             ${CLHEP_LIBRARIES}
 			DD4hep::DDCore)
 
@@ -24,6 +25,7 @@ TARGET_INCLUDE_DIRECTORIES(RealisticCaloDigiK4FWCPlugins
 		PRIVATE	./include
 			${CMAKE_CURRENT_BINARY_DIR}
     		${Gaudi_INCLUDE_DIRS}
+			${ROOT_INCLUDE_DIRS}
 			${DD4hep_INCLUDE_DIRS})
 
 SET( GAUDI_GENCONF_DIR "genConfDir" )

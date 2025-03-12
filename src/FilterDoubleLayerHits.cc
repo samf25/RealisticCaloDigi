@@ -17,11 +17,7 @@ DECLARE_COMPONENT(FilterDoubleLayerHits)
 
 FilterDoubleLayerHits::FilterDoubleLayerHits(const std::string& name, ISvcLocator* svcLoc) : Transformer(name, svcLoc,
     KeyValues("InputCollection", {"VXDTrackerHitPlanes"}),
-    KeyValues("OutputCollection", {"VXDTrackerHitPlanes_DLFiltered"}))
-{
-    m_geoSvc  = serviceLocator()->service("GeoSvc");  // important to initialize m_geoSvc
-    m_histSvc = serviceLocator()->service("HistSvc"); // important to initialize m_histSvc
-}
+    KeyValues("OutputCollection", {"VXDTrackerHitPlanes_DLFiltered"})) {}
 
 
 dd4hep::rec::Vector2D FilterDoubleLayerHits::globalToLocal(long int cellID, const dd4hep::rec::Vector3D& posGlobal, dd4hep::rec::ISurface** surfptr=nullptr) const{
@@ -47,8 +43,16 @@ dd4hep::rec::Vector2D FilterDoubleLayerHits::globalToLocal(long int cellID, cons
 
 
 StatusCode FilterDoubleLayerHits::initialize() {
-  MsgStream log(msgSvc(), name());
-  log << MSG::DEBUG << "   init called  " << endmsg;
+  m_geoSvc = serviceLocator()->service("GeoSvc");
+  if (!m_geoSvc) {
+    error() << "Unable to retrieve the GeoSvc" << endmsg;
+    return StatusCode::FAILURE;
+  }
+  // Get Histogram and Data Services
+	SmartIF<ITHistSvc> histSvc;
+	histSvc = serviceLocator()->service("THistSvc");
+
+  debug() << "   init called  " << endmsg;
 
   // Extracting double-layer cut configurations
   m_dlCuts.resize( m_dlCutConfigs.size() / 4 ) ;
@@ -63,7 +67,7 @@ StatusCode FilterDoubleLayerHits::initialize() {
   }
 
   // Get the surface map from the SurfaceManager
-  dd4hep::Detector& theDetector = dd4hep::Detector::getInstance();
+  dd4hep::Detector& theDetector = *(m_geoSvc->getDetector());
   dd4hep::rec::SurfaceManager& surfMan = *theDetector.extension<dd4hep::rec::SurfaceManager>();
   dd4hep::DetElement det = theDetector.detector( m_subDetName );
 
@@ -102,7 +106,7 @@ StatusCode FilterDoubleLayerHits::initialize() {
     }
 
     // Printing the configured cut
-    log << MSG::DEBUG <<  iCut << ". layers: " << cut.layer0 << " >> " << cut.layer1 << ";  dPhi: "
+    debug() <<  iCut << ". layers: " << cut.layer0 << " >> " << cut.layer1 << ";  dPhi: "
     << cut.dPhi_max << " rad;  dTheta: " << cut.dTheta_max << " rad" << endmsg;
   }
 
@@ -112,8 +116,6 @@ StatusCode FilterDoubleLayerHits::initialize() {
 
 
 edm4hep::TrackerHitPlaneCollection FilterDoubleLayerHits::operator()(const edm4hep::TrackerHitPlaneCollection& inputTrackerHitCollection) const{
-  MsgStream log(msgSvc(), name());
-
   std::string initString;
   initString = m_geoSvc->constantAsString(m_encodingStringVariable.value());
   dd4hep::DDSegmentation::BitFieldCoder bitFieldCoder(initString);  // check!
@@ -160,7 +162,7 @@ edm4hep::TrackerHitPlaneCollection FilterDoubleLayerHits::operator()(const edm4h
     unsigned int sideID   = bitFieldCoder.get(h.getCellID(), "side");
     unsigned int ladderID = bitFieldCoder.get(h.getCellID(), "module");
     unsigned int moduleID = bitFieldCoder.get(h.getCellID(), "sensor");
-    log << MSG::DEBUG << " Checking 1st hit " << iHit << " / " << nHit << " at layer: " << layerID << "  ladder: " << ladderID << "  module: " << moduleID <<  endmsg ;
+    debug() << " Checking 1st hit " << iHit << " / " << nHit << " at layer: " << layerID << "  ladder: " << ladderID << "  module: " << moduleID <<  endmsg ;
 
     const SensorPosition sensPos = {layerID, sideID, ladderID, moduleID};
 
@@ -218,7 +220,7 @@ edm4hep::TrackerHitPlaneCollection FilterDoubleLayerHits::operator()(const edm4h
       double dPhi = std::fabs(posGlobal2.phi() - posGlobal.phi());
       if (dPhi > dd4hep::pi) dPhi = dd4hep::twopi - dPhi;
       double dR = sqrt(dPhi*dPhi + dTheta*dTheta);
-      log << MSG::DEBUG << " Checking 2nd hit at layer: " << layerID2 << ";  dPhi: " << dPhi << ";  dTheta: " <<  dTheta << endmsg;
+      debug() << " Checking 2nd hit at layer: " << layerID2 << ";  dPhi: " << dPhi << ";  dTheta: " <<  dTheta << endmsg;
 
       // Updating the minimal values
       if (dR < dR_min) {
@@ -235,7 +237,7 @@ edm4hep::TrackerHitPlaneCollection FilterDoubleLayerHits::operator()(const edm4h
 
       nCompatibleHits++;
       hitAccepted[iHit2] = true;
-      log << MSG::DEBUG << " Accepted 2nd hit at layer: " << layerID2 << ";  dPhi: " << dPhi << ";  dTheta: " <<  dTheta << endmsg;
+      debug() << " Accepted 2nd hit at layer: " << layerID2 << ";  dPhi: " << dPhi << ";  dTheta: " <<  dTheta << endmsg;
     }
     // Filling diagnostic histograms
     if (m_fillHistos && dR_min < 998) {
@@ -255,7 +257,7 @@ edm4hep::TrackerHitPlaneCollection FilterDoubleLayerHits::operator()(const edm4h
     // Accepting the first hit if it has at least one compatible pair
     if (nCompatibleHits > 0) {
       hitAccepted[iHit] = true;
-      log << MSG::DEBUG << " Accepted 1st hit at layer: " << layerID << endmsg;
+      debug() << " Accepted 1st hit at layer: " << layerID << endmsg;
     }
   }
 
@@ -281,7 +283,7 @@ edm4hep::TrackerHitPlaneCollection FilterDoubleLayerHits::operator()(const edm4h
     outCol.push_back( inputTrackerHitCollection.at( iHit ) );
     nHitsAccepted++;
   }
-	log << MSG::INFO << " " << nHitsAccepted << " hits added to collection." << endmsg;
+	info() << " " << nHitsAccepted << " hits added to collection." << endmsg;
 
     return outCol;
 }

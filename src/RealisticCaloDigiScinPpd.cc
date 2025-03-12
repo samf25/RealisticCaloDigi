@@ -36,11 +36,11 @@ float RealisticCaloDigiScinPpd::digitiseDetectorEnergy(float energy) const {
     npe = m_PPD_n_pixels*(1.0 - exp( -npe/m_PPD_n_pixels ) );
     //apply binomial smearing
     float p = npe/m_PPD_n_pixels; // fraction of hit pixels on SiPM
-    npe = CLHEP::RandBinomial::shoot(m_PPD_n_pixels, p); //npe now quantised to integer pixels
+    npe = m_engine.Binomial(m_PPD_n_pixels, p); //npe now quantised to integer pixels
 
     if (m_pixSpread>0) {
       // variations in pixel capacitance
-      npe *= CLHEP::RandGauss::shoot(1, m_pixSpread/sqrt(npe) );
+      npe *= m_engine.Gaus(1, m_pixSpread/sqrt(npe) );
     }
   }
 

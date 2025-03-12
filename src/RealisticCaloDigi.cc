@@ -32,14 +32,19 @@ RealisticCaloDigi::RealisticCaloDigi(const std::string& name, ISvcLocator* svcLo
     { KeyValues("inputHitCollections", {"SimCalorimeterHits"}),
       KeyValues("inputHeaderCollections", {"EventHeader"}) },
     { KeyValues("outputHitCollections", {"CalorimeterHits"}),
-     KeyValues("outputRelationCollections", {"CaloHitLinks"}) })
-  {
-    m_geoSvc = serviceLocator()->service("GeoSvc");  // important to initialize m_geoSvc
-    m_rndSvc = serviceLocator()->service("RndmGenSvc");  // important to initialize m_rndSvc
-  }
+     KeyValues("outputRelationCollections", {"CaloHitLinks"}) }) {}
 
 StatusCode RealisticCaloDigi::initialize() {
-  MsgStream log(msgSvc(), name());
+  m_geoSvc = serviceLocator()->service("GeoSvc");
+  if (!m_geoSvc) {
+    error() << "Unable to retrieve the GeoSvc" << endmsg;
+    return StatusCode::FAILURE;
+  }
+  m_uidSvc = service<IUniqueIDGenSvc>("UniqueIDGenSvc", true);
+  if (!m_uidSvc) {
+    error() << "Unable to get UniqueIDGenSvc" << endmsg;
+  }
+
 
   // unit in which threshold is specified
   if (m_threshold_unit.value().compare("MIP") == 0){
@@ -49,7 +54,7 @@ StatusCode RealisticCaloDigi::initialize() {
   } else if (m_threshold_unit.value().compare("px") == 0){
     m_threshold_iunit=NPE;
   } else {
-    log << MSG::ERROR << "could not identify threshold unit. Please use \"GeV\", \"MIP\" or \"px\"! Aborting." << endmsg;
+    error() << "could not identify threshold unit. Please use \"GeV\", \"MIP\" or \"px\"! Aborting." << endmsg;
   }
   
   // convert the threshold to the approriate units (i.e. MIP for silicon, NPE for scint)
@@ -62,23 +67,19 @@ StatusCode RealisticCaloDigi::initialize() {
   };  
   auto findIter = integrations.find( m_integration_method ) ;
   if(integrations.end() == findIter) {
-    log << MSG::ERROR << "Could not guess timing calculation method!" << endmsg;
-    log << MSG::ERROR << "Available are: Standard, ROC. Provided: " << m_integration_method << endmsg;
-    log << MSG::ERROR << "Aborting..." << endmsg;
+    error() << "Could not guess timing calculation method!" << endmsg;
+    error() << "Available are: Standard, ROC. Provided: " << m_integration_method << endmsg;
+    error() << "Aborting..." << endmsg;
   }
   m_integr_function = findIter->second;
   
   // check if parameters are correctly set for the ROC integration
   if("ROC" == m_integration_method) {
     if(m_fast_shaper == 0.0f || m_slow_shaper == 0.0f) {
-      log << MSG::ERROR << "Fast/slow shaper parameter(s) not set. Required for ROC integration!" << endmsg;
-      log << MSG::ERROR << "Aborting..." << endmsg;
+      error() << "Fast/slow shaper parameter(s) not set. Required for ROC integration!" << endmsg;
+      error() << "Aborting..." << endmsg;
     }
   }
-
-  // Initialize Random Distributions
-  m_rndSvc->generator(Rndm::Gauss(0.0, 1.0), m_gauss).ignore();
-  m_rndSvc->generator(Rndm::Flat(0.0, 1.0), m_flat).ignore();
 
   return StatusCode::SUCCESS;
 }
@@ -88,13 +89,13 @@ StatusCode RealisticCaloDigi::initialize() {
 std::tuple<edm4hep::CalorimeterHitCollection, edm4hep::CaloHitSimCaloHitLinkCollection> RealisticCaloDigi::operator()(
       const edm4hep::SimCalorimeterHitCollection& inputSim,
       const edm4hep::EventHeaderCollection& headers) const {
-  MsgStream log(msgSvc(), name());
-  //auto seeder = service<IUniqueIDGenSvc>("UniqueIDGenSvc", true);
-  //CLHEP::HepRandom::setTheSeed( seeder->getUniqueID(headers[0].getEventNumber(), headers[0].getRunNumber(), this->name()) );
+  auto seed = m_uidSvc->getUniqueID(headers[0].getEventNumber(), headers[0].getRunNumber(), this->name());
+  debug() << "Using seed " << seed << " for event " << headers[0].getEventNumber() << " and run "
+          << headers[0].getRunNumber() << endmsg;
+  m_engine.SetSeed(seed);
 
   // decide on this event's correlated miscalibration
-  m_gauss->initialize(Rndm::Gauss(1.0, m_misCalib_correl)).ignore();
-  float event_correl_miscalib = ( m_misCalib_correl>0 ) ? m_gauss->shoot() : 0;
+  float event_correl_miscalib = ( m_misCalib_correl>0 ) ? m_engine.Gaus(1.0, m_misCalib_correl) : 0;
 
   edm4hep::CalorimeterHitCollection newcol;
   edm4hep::CaloHitSimCaloHitLinkCollection relcol;
@@ -107,7 +108,7 @@ std::tuple<edm4hep::CalorimeterHitCollection, edm4hep::CaloHitSimCaloHitLinkColl
   initString = m_geoSvc->constantAsString(m_encodingStringVariable.value());
   dd4hep::DDSegmentation::BitFieldCoder bitFieldCoder(initString);  // check!
 
-  log << MSG::DEBUG << "Number of elements = " << inputSim.size() << endmsg;
+  debug() << "Number of elements = " << inputSim.size() << endmsg;
   // loop over input hits
   for (int j=0; j < inputSim.size(); ++j) {
     edm4hep::SimCalorimeterHit simhit0 = inputSim.at( j );
@@ -133,7 +134,7 @@ std::tuple<edm4hep::CalorimeterHitCollection, edm4hep::CaloHitSimCaloHitLinkColl
 	    int layer = bitFieldCoder.get(simhit->getCellID(), "layer");
 	    newhit.setType( CHT( cht_type, cht_id, cht_lay, layer ) );
 
-      log << MSG::DEBUG << "orig/new hit energy: " << simhit->getEnergy() << " " << newhit.getEnergy() << endmsg;
+      debug() << "orig/new hit energy: " << simhit->getEnergy() << " " << newhit.getEnergy() << endmsg;
 
       edm4hep::MutableCaloHitSimCaloHitLink rel = relcol.create();
       rel.setTo(simhit0);
@@ -174,8 +175,7 @@ float RealisticCaloDigi::EnergyDigi(float energy, float event_correl_miscalib) c
   // random miscalib, uncorrelated in cells
   if (m_misCalib_uncorrel>0) {
     float miscal(0);
-    m_gauss->initialize(Rndm::Gauss(1.0, m_misCalib_uncorrel)).ignore();
-    miscal = m_gauss->shoot();
+    miscal = m_engine.Gaus(1.0, m_misCalib_uncorrel);
     e_out*=miscal;
   }
 
@@ -187,14 +187,12 @@ float RealisticCaloDigi::EnergyDigi(float energy, float event_correl_miscalib) c
   if ( m_elec_rangeMip > 0 ) e_out = std::min ( e_out, m_elec_rangeMip*oneMipInMyUnits );
   // add electronics noise
   if ( m_elec_noiseMip > 0 ) {
-    m_gauss->initialize(Rndm::Gauss(0, m_elec_noiseMip*oneMipInMyUnits)).ignore();
-    e_out += m_gauss->shoot();
+    e_out += m_engine.Gaus(0, m_elec_noiseMip*oneMipInMyUnits);
   }
 
   // random cell kill
-  if (m_deadCell_fraction>0){
-    m_flat->initialize(Rndm::Flat(0.0,1.0)).ignore();
-    if (m_flat->shoot()<m_deadCell_fraction ) e_out=0;
+  if (m_deadCell_fraction>0) {
+    if (m_engine.Uniform(0., 1.) < m_deadCell_fraction ) e_out=0;
   }
   return e_out;
 }
@@ -299,7 +297,6 @@ RealisticCaloDigi::integr_res_opt RealisticCaloDigi::ROCIntegration( const edm4h
 //------------------------------------------------------------------------------
 
 float RealisticCaloDigi::SmearTime(float time) const{
-  m_gauss->initialize(Rndm::Gauss(0, m_time_resol)).ignore();
-  return m_time_resol>0.f ? time + m_gauss->shoot() : time;
+  return m_time_resol>0.f ? time + m_engine.Gaus(0, m_time_resol) : time;
 }
 
